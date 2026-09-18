@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Wrapper `earendel` — tudo isolado nesta pasta.
+# Usa .venv local; nunca instala nada no sistema.
+set -euo pipefail
+# Resolve symlink (ex: ~/.local/bin/earendel -> pasta do projeto)
+SRC="${BASH_SOURCE[0]}"
+while [[ -L "$SRC" ]]; do
+  LINK="$(readlink "$SRC")"
+  [[ "$LINK" != /* ]] && SRC="$(dirname "$SRC")/$LINK" || SRC="$LINK"
+done
+ROOT="$(cd "$(dirname "$SRC")" && pwd)"
+PY="$ROOT/.venv/bin/python"
+if [[ ! -x "$PY" ]]; then
+  echo "[earendel] venv não encontrado em $ROOT/.venv" >&2
+  echo "[earendel] rode: ./scripts/install.sh  (só cria arquivos DENTRO desta pasta)" >&2
+  exit 1
+fi
+export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+export EARENDEL_CONFIG="${EARENDEL_CONFIG:-$ROOT/config.json}"
+export EARENDEL_MODELS="${EARENDEL_MODELS:-$ROOT/models}"
+exec "$PY" -u -m earendel "$@"

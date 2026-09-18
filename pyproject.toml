@@ -1,0 +1,9 @@
+[project]
+name = "earendel"
+version = "0.1.0"
+description = "CLI wake-word + STT pt-BR/en-US offline (Faster-Whisper), popup wave, digita onde está o foco"
+requires-python = ">=3.10"
+readme = "README.md"
+
+[project.scripts]
+earendel = "earendel.cli:main"

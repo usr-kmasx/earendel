@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+models/
+*.pt
+*.bin
+config.json
+/tmp/
+rtf.json
+.test-install.log

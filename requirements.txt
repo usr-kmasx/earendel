@@ -1,0 +1,7 @@
+# Instalado SOMENTE dentro de .venv (isolado na pasta do projeto).
+# Nada aqui vai para o sistema.
+faster-whisper>=1.0.0
+sounddevice>=0.4.6
+numpy>=1.24
+pynput>=1.7.6
+vosk>=0.3.45
