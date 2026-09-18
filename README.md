@@ -28,7 +28,7 @@ transcreve (Faster-Whisper, 100% offline) e **digita onde o foco está** + clipb
 
 Modelos (`small` + porteiros pt/en, ~580MB) vêm integrados em `./models`
 via `install.sh` — em uso, **nada baixa nada** (trava offline; faltando,
-o erro manda rodar o bootstrap).
+o erro manda rodar o install).
 
 Modelos ficam **carregados em RAM** após o 1º uso e são **descarregados após
 3 min sem uso** (`idle_unload_s` no `config.json`; `0` = sempre carregado).
@@ -43,7 +43,7 @@ descarrega sozinho quando você para de ditar.
 
 ## Popup wave
 
-- Qt transparente com CSS (dentro do `.venv`, nada no sistema) → Tk → notify.
+- Tk translúcido inferior-central (qualquer DE) → notify sem Tk.
   Barras reagem à sua voz (FFT do mic); texto longo vira `...`.
 
 ## Digitar onde está o foco
