@@ -65,7 +65,7 @@ if [[ "$ans2" =~ ^[sSyY]$ ]]; then
   cat > "$SVC" <<EOF
 [Unit]
 Description=Earendel wake-word STT (isolado em $ROOT)
-After=pipewire.service
+After=pipewire.service graphical-session.target
 
 [Service]
 ExecStart=$ROOT/earendel

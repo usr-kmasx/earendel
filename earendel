@@ -9,6 +9,15 @@ while [[ -L "$SRC" ]]; do
   [[ "$LINK" != /* ]] && SRC="$(dirname "$SRC")/$LINK" || SRC="$LINK"
 done
 ROOT="$(cd "$(dirname "$SRC")" && pwd)"
+# Recompõe ambiente gráfico (service pode subir antes da sessão exportar).
+# Busca no user manager, que o Plasma atualiza no login.
+for _v in DISPLAY WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_CURRENT_DESKTOP XAUTHORITY; do
+  if [[ -z "${!_v:-}" ]]; then
+    _val="$(systemctl --user show-environment 2>/dev/null | grep -E "^${_v}=" | cut -d= -f2- || true)"
+    [[ -n "${_val:-}" ]] && export "$_v=$_val"
+  fi
+done
+unset _v _val
 PY="$ROOT/.venv/bin/python"
 if [[ ! -x "$PY" ]]; then
   echo "[earendel] venv não encontrado em $ROOT/.venv" >&2

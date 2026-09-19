@@ -18,6 +18,20 @@ def main() -> int:
     pop = WavePopup("Ouvindo... fale agora")
     pop.show()
     impl = pop._impl or "notify"
+    if impl == "tk":
+        # prova de vida: só anuncia tk se renderizou (sem DISPLAY o Tk morre)
+        ok = False
+        try:
+            ok = bool(pop._ready_ok.wait(timeout=4))
+        except Exception:
+            ok = False
+        if not ok:
+            try:
+                pop.close()
+            except Exception:
+                pass
+            impl = "notify"
+            WavePopup._notify(pop.text)
     try:
         print(f"READY {impl}", flush=True)
     except Exception:

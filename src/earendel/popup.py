@@ -288,6 +288,7 @@ class WavePopup:
 
         n = 28
         t0 = time.time()
+        self._ready_ok = threading.Event()
 
         def frame():
             if self._stop.is_set():
@@ -327,6 +328,10 @@ class WavePopup:
                     bw = (cw - 20) * self.progress / 100
                     canvas.create_line(10, 60, 10 + bw, 60,
                                        fill="#7ddf8a", width=5, capstyle="round")
+            except Exception:
+                pass
+            try:
+                self._ready_ok.set()  # 1º quadro renderizou de verdade
             except Exception:
                 pass
             root.after(50, frame)

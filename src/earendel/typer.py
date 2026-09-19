@@ -20,10 +20,10 @@ import shutil
 import subprocess
 import time
 
-# backends que falharam recentemente: pula sem tentar (TTL 10min).
+# backends que falharam recentemente: pula sem tentar (TTL curto).
 # Ex.: wtype no KDE falha sempre — sem fork, sem spam, sem espera.
 _DEAD: dict[str, float] = {}
-_DEAD_TTL = 600.0
+_DEAD_TTL = 120.0
 
 
 def _is_dead(name: str) -> bool:
@@ -194,11 +194,14 @@ def type_text(text: str) -> tuple[str, str]:
                       "(texto segue copiado)", file=sys.stderr)
                 continue
         rc, err = _run(cmd, timeout=30)
+        if rc != 0:
+            time.sleep(0.3)  # transitório? (socket/daemon) tenta 1x de novo
+            rc, err = _run(cmd, timeout=30)
         if rc == 0:
             return "typed", name
         _mark_dead(name)
-        print(f"[earendel] digitar via {name} falhou (rc={rc}): {err[:160]}",
-              file=sys.stderr)
+        print(f"[earendel] {name} em quarentena 2min "
+              f"(falhou 2x, rc={rc}): {err[:160]}", file=sys.stderr)
     if clip:
         return "clipboard", "copiado — cole com Ctrl+V"
     return "failed", "sem clipboard nem digitador"
