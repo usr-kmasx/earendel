@@ -1,7 +1,8 @@
 # Earendel — wake-word + STT offline (pt-BR/en-US)
 
-CLI `earendel`: fica ouvindo **"earendel"**, abre popup wave inferior-central,
-transcreve (Faster-Whisper, 100% offline) e **digita onde o foco está** + clipboard.
+CLI `earendel`: fica ouvindo **sua palavra de ativação**, abre popup wave
+inferior-central, transcreve (Faster-Whisper, 100% offline) e **digita onde
+o foco está** + clipboard.
 
 ## Isolamento (regra do projeto)
 
@@ -13,27 +14,38 @@ transcreve (Faster-Whisper, 100% offline) e **digita onde o foco está** + clipb
 ## Uso
 
 ```bash
-./scripts/install.sh          # 1ª vez: cria .venv isolado + deps (só aqui dentro)
+./scripts/install.sh               # 1ª vez: .venv + modelos + symlink + service
+./earendel -conf -setup            # palavra de ativação + digitador (pergunta tudo)
 ./earendel --help
-./earendel -conf -mic           # lista microfones (sem nome = lista)
-./earendel -conf -mic "USB"     # fixa um mic
-./earendel -conf -mic default   # volta a seguir o padrão do sistema (padrão)
-./earendel -conf -key "ctrl+alt+e"  # atalho GLOBAL DO APP (só vale com ele rodando)
-./earendel -conf -word "jarvis"     # troca a palavra de ativação (+ ./scripts/reload.sh)
-./earendel -conf -setup             # ele mesmo instala/ativa o que falta (arch/debian/fedora/suse/alpine)
-./earendel                      # daemon: wake-word sempre ativo
-./earendel --toggle             # UMA ditada avulsa (p/ ligar numa tecla da DE)
+./earendel -conf -mic              # lista microfones (sem nome = lista)
+./earendel -conf -mic "USB"        # fixa um mic
+./earendel -conf -mic default      # volta a seguir o padrão do sistema
+./earendel -conf -key "ctrl+alt+e" # atalho DO APP (só vale com ele rodando)
+./earendel -conf -word "malu"      # palavra de ativação (vale pt+en, auto-aplica)
+./earendel --toggle                # UMA ditada avulsa (p/ tecla da DE)
 ./earendel --status
+./earendel                         # daemon: escuta sempre ativo
 ```
 
-Modelos (`small` + porteiros pt/en, ~580MB) vêm integrados em `./models`
-via `install.sh` — em uso, **nada baixa nada** (trava offline; faltando,
-o erro manda rodar o install).
+Toda alteração de `-conf` **aplica sozinha** (reinicia o service);
+sem service, ele pede `./scripts/reload.sh`.
 
-Modelos ficam **carregados em RAM** após o 1º uso e são **descarregados após
-3 min sem uso** (`idle_unload_s` no `config.json`; `0` = sempre carregado).
-No daemon, o modelo de wake fica quente enquanto escuta; o de transcrição
-descarrega sozinho quando você para de ditar.
+## Palavra de ativação
+
+- Sem palavra padrão: você escolhe na setup ou com `-conf -word`.
+- Vale para os dois porteiros (pt+en) ao mesmo tempo; várias separadas
+  por vírgula (`"malu, hey computer"`).
+- Dispara só com a palavra **sozinha** (match exato, sem tolerância).
+- Só vale palavra do dicionário pt/en — o comando **avisa na hora**
+  se nunca ativaria. `off` remove.
+
+## Modelos (`small` + porteiros pt/en, ~580MB)
+
+- Vêm integrados em `./models` via `install.sh` — em uso, **nada baixa
+  nada** (trava offline; faltando, o erro manda rodar o install).
+- Porteiros (Vosk pt+en): **sempre residentes** (~150–200MB, ~8% CPU).
+- Transcritor (`small`): carrega na ditada, **descarrega após 3 min sem
+  uso** (`idle_unload_s`; `0` = sempre carregado).
 
 ## Atalho: do app, não do sistema
 
@@ -43,25 +55,20 @@ descarrega sozinho quando você para de ditar.
 
 ## Popup wave
 
-- Tk translúcido inferior-central (qualquer DE) → notify sem Tk.
-  Barras reagem à sua voz (FFT do mic); texto longo vira `...`.
+- Tk translúcido inferior-central no monitor primário (qualquer DE) → notify sem Tk.
+  Barras reagem à sua voz (FFT do mic); transcrição mostra %; texto longo vira `...`.
 
 ## Digitar onde está o foco
 
-- Wayland wlroots/Sway: `wtype` · **KDE Wayland: `ydotool`** (KWin não tem
-  protocolo de teclado virtual, `wtype` falha) · X11: `ydotool` também.
-- Clipboard sempre (`wl-copy`/`xclip`) como rede de segurança.
-- Sem digitador funcionando, o popup avisa `[copiado — cole com Ctrl+V]`.
-- `ydotool` é oferecido pelo `install.sh` (opcional, registrado no log).
+- ASCII digita tecla por tecla; com acento cola em fatias (animação equivalente).
+- Clipboard sempre como rede de segurança (Klipper no KDE, `wl-copy` fora).
+- Sem digitador funcionando, o popup avisa `[copiado — cole com Ctrl+V]`
+  (no terminal, cole com Ctrl+Shift+V).
+- `ydotool` é oferecido pelo `-conf -setup` (opcional, registrado no log).
 
-## Remover teste
-
-```bash
-./scripts/uninstall.sh
-```
-
-## Recarregar após mudanças
+## Remover / recarregar
 
 ```bash
-./scripts/reload.sh   # reinicia o service p/ aplicar código/config novo + mostra log
+./scripts/uninstall.sh  # remove tudo (pergunta cada parte)
+./scripts/reload.sh     # só p/ mudança de CÓDIGO (config auto-aplica)
 ```
