@@ -10,14 +10,20 @@ while [[ -L "$SRC" ]]; do
 done
 ROOT="$(cd "$(dirname "$SRC")" && pwd)"
 # Recompõe ambiente gráfico (service pode subir antes da sessão exportar).
-# Busca no user manager, que o Plasma atualiza no login.
+# Busca no user manager, que o Plasma atualiza no login — esperando até 90s
+# no boot frio em vez de subir cego e ficar sem popup/clipboard.
+for _i in $(seq 1 45); do
+  _have="$(systemctl --user show-environment 2>/dev/null | grep -cE "^(DISPLAY|WAYLAND_DISPLAY)=" || true)"
+  if [[ "${_have:-0}" -gt 0 ]]; then break; fi
+  sleep 2
+done
 for _v in DISPLAY WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_CURRENT_DESKTOP XAUTHORITY; do
   if [[ -z "${!_v:-}" ]]; then
     _val="$(systemctl --user show-environment 2>/dev/null | grep -E "^${_v}=" | cut -d= -f2- || true)"
     [[ -n "${_val:-}" ]] && export "$_v=$_val"
   fi
 done
-unset _v _val
+unset _v _val _i _have
 PY="$ROOT/.venv/bin/python"
 if [[ ! -x "$PY" ]]; then
   echo "[earendel] venv não encontrado em $ROOT/.venv" >&2

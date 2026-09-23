@@ -165,6 +165,11 @@ def _ellipsize(text: str, limit: int = 100) -> str:
     return t if len(t) <= limit else t[:limit - 3] + "..."
 
 
+def _project_root() -> str:
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(os.path.dirname(here))
+
+
 class WavePopup:
     def __init__(self, text="Ouvindo...", width=340, height=130, margin_bottom=90,
                  alpha=0.82):
@@ -174,6 +179,7 @@ class WavePopup:
         self.margin_bottom = margin_bottom
         self.alpha = alpha
         self.progress: int | None = None  # 0..100 durante "Transcrevendo..."
+        self._ready_ok = threading.Event()  # setado no 1º quadro real
         self._bars: list | None = None    # espectro da voz (estilo Cava)
         self._bars_ts: float = 0.0
         self._smooth: list | None = None
@@ -249,9 +255,9 @@ class WavePopup:
     # ---- geometria: monitor PRIMÁRIO (não o centro da área total) ----
     def _primary_geometry(self, full_w: int, full_h: int):
         """Retorna (x, y, w, h) do monitor primário. Fallback: tela cheia."""
-        for fn in (_primary_from_kscreen, _primary_from_mutter,
-                   _primary_from_hypr, _primary_from_sway,
-                   _primary_from_xrandr):
+        for fn in (_primary_from_mutter, _primary_from_hypr,
+                   _primary_from_sway, _primary_from_xrandr,
+                   _primary_from_kscreen):
             try:
                 g = fn()
             except Exception:
@@ -288,7 +294,6 @@ class WavePopup:
 
         n = 28
         t0 = time.time()
-        self._ready_ok = threading.Event()
 
         def frame():
             if self._stop.is_set():
@@ -375,10 +380,11 @@ class WavePopupProcess:
 
     def show(self):
         try:
+            errlog = open(os.path.join(_project_root(), "popup-err.log"), "ab")
             self._proc = subprocess.Popen(
                 [sys.executable, "-m", "earendel.popup_worker"],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL, text=True,
+                stderr=errlog, text=True,
                 start_new_session=True)
         except Exception:
             self._proc = None

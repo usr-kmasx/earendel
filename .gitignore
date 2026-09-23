@@ -8,3 +8,4 @@ config.json
 /tmp/
 rtf.json
 .test-install.log
+popup-err.log

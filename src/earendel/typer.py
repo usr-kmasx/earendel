@@ -124,17 +124,20 @@ def _is_kde() -> bool:
 def copy_to_clipboard(text: str) -> bool:
     if not text:
         return False
-    # KDE: Klipper via qdbus6 (síncrono, sem o fork instável do wl-copy)
+    # Genérico primeiro (qualquer DE); Klipper só como fallback no KDE,
+    # pois wl-copy pode engasgar 1x com o gerenciador — tenta 2x.
+    if shutil.which("wl-copy"):
+        for _ in range(2):
+            rc, _ = _run(["wl-copy"], text.encode("utf-8"), timeout=2)
+            if rc == 0:
+                return True
+    # KDE: Klipper via qdbus6 (síncrono)
     qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
     if _is_kde() and qdbus:
         rc, _ = _run([qdbus, "org.kde.klipper", "/klipper",
                       "org.kde.klipper.klipper.setClipboardContents", text],
                      timeout=5)
         if rc == 0 and _clipboard_ready(text, timeout=1.0):
-            return True
-    if shutil.which("wl-copy"):
-        rc, _ = _run(["wl-copy"], text.encode("utf-8"), timeout=2)
-        if rc == 0:
             return True
     if shutil.which("xclip"):
         rc, _ = _run(["xclip", "-selection", "clipboard"],
