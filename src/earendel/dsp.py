@@ -49,16 +49,23 @@ class VoiceGate:
         self.sr = sr
         self.frame_n = frame_n
         self.te = energy_thresh(noise_floor)
+        self.te_low = max(0.006, noise_floor * 1.3 + 0.001)  # histerese
         self.low = noise_floor * 1.3 + 0.002  # quietude de verdade
         self.min_peak = min_peak
         self.hang_n = max(1, int(hangover_s * sr / frame_n))
         self._hang = 0
         self.last_energy = 0.0
+        self.relaxed = False
+
+    def relax(self):
+        """Depois de voz confirmada: aceita sílaba baixa (não corta)."""
+        self.relaxed = True
 
     def frame_voice(self, frame) -> bool:
         fr = np.asarray(frame).reshape(-1)
         self.last_energy = rms(fr)
-        raw = self.last_energy >= self.te and \
+        te = self.te_low if self.relaxed else self.te
+        raw = self.last_energy >= te and \
             is_harmonic(fr, self.sr, min_peak=self.min_peak)
         if raw:
             self._hang = self.hang_n

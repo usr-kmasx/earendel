@@ -121,39 +121,56 @@ def _voice_thresh(noise_floor: float) -> float:
 
 
 def _record_until_silence(sr: int, device, noise_floor=0.01,
-                          silence_s=1.2, no_voice_s=3.0, _blocks=None) -> np.ndarray:
+                          silence_s=1.0, no_voice_s=3.0, _blocks=None) -> np.ndarray:
     """Grava até `silence_s` de silêncio APÓS voz real. Sem teto de tempo:
     enquanto houver voz, continua gravando; só para quando você parar.
 
-    Voz = energia ok E harmônica (VoiceGate): barulho alto sem pitch
-    (teclada, batida, chiado) não segura a gravação.
+    Voz = VAD neural (Silero): entende sílaba baixa e pausa, ignora ruído
+    por conteúdo. Sem o modelo, cai p/ VoiceGate (energia+harmônica).
     `_blocks` é só p/ testes (lista de blocos em vez do mic real).
     """
     import sounddevice as sd
     from . import dsp as dspmod
-    gate = dspmod.VoiceGate(noise_floor, sr)
-    frame_n = gate.frame_n
+    try:
+        from . import vad_silero
+        sil = vad_silero.SileroVAD()
+        use_sil, frame_n = True, vad_silero.WIN
+    except Exception as e:
+        print(f"[earendel] VAD neural indisponível ({e}); usando energia.")
+        sil, use_sil = None, False
+        gate = dspmod.VoiceGate(noise_floor, sr)
+        frame_n = gate.frame_n
     chunks: list[np.ndarray] = []
     pending = np.zeros(0, dtype=np.float32)
     silent = 0.0
     voiced = 0.0
     elapsed = 0.0
+    rate = 16000  # decisão sempre em 16k (Silero exige)
 
     def feed(block: np.ndarray):
         nonlocal pending, silent, voiced, elapsed
         block = np.asarray(block, dtype=np.float32).reshape(-1)
         chunks.append(block)
-        elapsed += block.size / sr
+        if sr != 16000:
+            block = _to_16k(block, sr, 16000)
+        elapsed += block.size / rate
         buf = np.concatenate([pending, block]) if pending.size else block
         n = (buf.size // frame_n) * frame_n
         for i in range(0, n, frame_n):
-            if gate.frame_voice(buf[i:i + frame_n]):
-                voiced += frame_n / sr
+            fr = buf[i:i + frame_n]
+            if use_sil:
+                is_v = sil.is_voice(fr)
+            else:
+                is_v = gate.frame_voice(fr)
+            if is_v:
+                voiced += frame_n / rate
                 silent = 0.0
-            elif gate.last_energy >= gate.low:
+                if not use_sil and voiced >= 0.5:
+                    gate.relax()
+            elif not use_sil and gate.last_energy >= gate.low:
                 pass  # alto mas não-vozeado: segura (não corta, não conta)
             else:
-                silent += frame_n / sr
+                silent += frame_n / rate
         pending = buf[n:]
 
     def should_stop() -> bool:
@@ -240,7 +257,7 @@ def dictate_once(cfg: dict, status_cb=print, mic=None, noise_mag=None) -> str:
     # espelha a voz no popup (barras estilo Cava, ~15fps, só gravando)
     stop_bars = _threading.Event()
     agc_peak = [1e-6]
-    bars_floor = dspmod.energy_thresh(noise_floor)
+    bars_floor = dspmod.energy_thresh(noise_floor) * 0.6  # visual: +sensível
 
     def _bars_sender():
         while not stop_bars.wait(1.0 / 15):
@@ -427,8 +444,16 @@ def run_daemon(cfg: dict | None = None):
                 print(f"[earendel] porteiro ouviu: '{txt.strip()}'")
             if txt and sttmod.looks_like_wake(txt, words):
                 conf = vw.wake_conf(txt, words) if vw is not None else 1.0
-                tail = mic.window(1.0)
-                loud = dspmod.rms(tail) >= dspmod.energy_thresh(ambient) if tail.size else False
+                # voz presente se ALGUM trecho dos últimos 3s teve energia
+                # (o final chega atrasado: medir só a cauda pega silêncio)
+                loud = False
+                tail = mic.window(3.0)
+                if tail.size:
+                    fr = max(1, sr // 5)
+                    for i in range(0, tail.size - fr + 1, fr):
+                        if dspmod.rms(tail[i:i + fr]) >= dspmod.energy_thresh(ambient):
+                            loud = True
+                            break
                 if conf >= wake_conf_min and (vw is None or loud):
                     print(f"[earendel] wake detectado ('{txt.strip()}' conf={conf:.2f}) -> ouvindo...")
                     dictate_once(cfg, mic=mic, noise_mag=noise_mag)
