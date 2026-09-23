@@ -191,11 +191,6 @@ def type_text(text: str) -> tuple[str, str]:
     for name, cmd in cands:
         if _is_dead(name):
             continue
-        if name == "ydotool-paste":
-            if not _clipboard_ready(text):
-                print("[earendel] clipboard não assumiu a tempo; sem paste "
-                      "(texto segue copiado)", file=sys.stderr)
-                continue
         rc, err = _run(cmd, timeout=30)
         if rc != 0:
             time.sleep(0.3)  # transitório? (socket/daemon) tenta 1x de novo

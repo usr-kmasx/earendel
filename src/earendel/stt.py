@@ -30,11 +30,6 @@ def configure_idle(seconds) -> int:
     return _IDLE_S
 
 
-def loaded_models() -> list[str]:
-    with _LOCK:
-        return sorted(_MODELS.keys())
-
-
 def _ensure_reaper():
     global _REAPER
     if _REAPER is None or not _REAPER.is_alive():
@@ -111,13 +106,6 @@ def get_model(name: str):
     print(f"[earendel] modelo '{key}' carregado.")
     _ensure_reaper()
     return model
-
-
-def unload_all():
-    """Descarrega todos os modelos (útil p/ testes/desligamento)."""
-    with _LOCK:
-        _MODELS.clear()
-    gc.collect()
 
 
 def transcribe(audio_16k_mono, model_name: str, language=None) -> str:
