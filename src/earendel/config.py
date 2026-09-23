@@ -18,6 +18,7 @@ DEFAULTS = {
     "no_voice_s": 3.0,    # se ninguém falar nesse tempo, encerra ("Não ouvi nada")
     "wake_backend": "vosk", # porteiro duplo pt+en ("vosk") ou transcritor ("whisper")
     "offline": True,       # nunca baixa modelo em uso (só bootstrap/setup baixa)
+    "wake_conf": 0.75,     # confiança mínima do porteiro (0..1)
 }
 
 

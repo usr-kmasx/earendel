@@ -79,6 +79,11 @@ class GaplessMic:
             self._consumed = self._total
             return out
 
+    def discard(self):
+        """Descarta áudio acumulado sem decodificar (pós-ditada)."""
+        with self._lock:
+            self._consumed = self._total
+
     def stop(self):
         try:
             if self._stream:
@@ -359,12 +364,20 @@ def run_daemon(cfg: dict | None = None):
     last_resync = time.time()
     from . import dsp as dspmod
     noise_mag = None  # perfil do ambiente: só aprende de trecho quieto
+    ambient = 0.010   # chão de ruído (EMA dos trechos quietos)
+    wake_conf_min = float(cfg.get("wake_conf", 0.75))
     try:
         while True:
             if TRIGGER_HOTKEY.is_set():
                 TRIGGER_HOTKEY.clear()
                 print("[earendel] atalho pressionado -> ditando...")
                 dictate_once(cfg, mic=mic, noise_mag=noise_mag)
+                mic.discard()  # não re-decodifica a própria ditada
+                if vw is not None:
+                    try:
+                        vw.reset()  # estado limpo: sem final atrasado
+                    except Exception:
+                        pass
                 continue
             # segue o padrão do sistema: se mudou na DE, reabre o stream
             if follow_system and time.time() - last_resync > 5:
@@ -384,17 +397,22 @@ def run_daemon(cfg: dict | None = None):
                 time.sleep(0.5)  # sem gatilho: só atalho; não gasta CPU
                 continue
             # aprende o ambiente quando está quieto (p/ limpar o áudio)
-            if dspmod.rms(chunk) < 0.015:
+            r = dspmod.rms(chunk)
+            if r < 0.015:
                 prof = dspmod.mag_profile(chunk[:sr])
                 if prof is not None:
                     noise_mag = prof
+            if r < 0.02:
+                ambient = 0.9 * ambient + 0.1 * r
             try:
                 if vw is not None:
                     new = mic.read_new()
                     txt = ""
                     if new.size:
-                        pcm = (np.clip(new.reshape(-1), -1, 1) * 32767
-                               ).astype(np.int16).tobytes()
+                        fl = np.clip(new.reshape(-1), -1, 1)
+                        if noise_mag is not None:
+                            fl = dspmod.denoise(fl, noise_mag)
+                        pcm = (fl * 32767).astype(np.int16).tobytes()
                         txt = vw.feed(pcm)
                 else:
                     listen = dspmod.denoise(chunk, noise_mag) if noise_mag is not None else chunk
@@ -404,10 +422,24 @@ def run_daemon(cfg: dict | None = None):
                 print(f"[earendel] erro no wake: {e}")
                 time.sleep(0.5)
                 continue
-            if txt and sttmod.looks_like_wake(
-                    txt, vw.words if vw is not None else wakes):
-                print(f"[earendel] wake detectado ('{txt.strip()}') -> ouvindo...")
-                dictate_once(cfg, mic=mic, noise_mag=noise_mag)
+            words = vw.words if vw is not None else wakes
+            if txt and not sttmod.looks_like_wake(txt, words):
+                print(f"[earendel] porteiro ouviu: '{txt.strip()}'")
+            if txt and sttmod.looks_like_wake(txt, words):
+                conf = vw.wake_conf(txt, words) if vw is not None else 1.0
+                tail = mic.window(1.0)
+                loud = dspmod.rms(tail) >= dspmod.energy_thresh(ambient) if tail.size else False
+                if conf >= wake_conf_min and (vw is None or loud):
+                    print(f"[earendel] wake detectado ('{txt.strip()}' conf={conf:.2f}) -> ouvindo...")
+                    dictate_once(cfg, mic=mic, noise_mag=noise_mag)
+                    mic.discard()  # não re-decodifica a própria ditada
+                    if vw is not None:
+                        try:
+                            vw.reset()  # estado limpo: sem final atrasado
+                        except Exception:
+                            pass
+                else:
+                    print(f"[earendel] suspeita ignorada ('{txt.strip()}' conf={conf:.2f} voz={loud})")
             elif vw is not None:
                 time.sleep(0.25)  # cadência: porteiro não precisa girar a toda
     except KeyboardInterrupt:

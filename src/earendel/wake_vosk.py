@@ -15,6 +15,15 @@ import zipfile
 MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip"
 MODEL_SUBDIR = "vosk-model-small-pt-0.3"
 
+_MODELS_CACHE: dict = {}
+
+
+def _cached_model(lang: str):
+    from vosk import Model
+    if lang not in _MODELS_CACHE:
+        _MODELS_CACHE[lang] = Model(ensure_model(lang))
+    return _MODELS_CACHE[lang]
+
 MODELS = {
     "pt": ("https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip",
            "vosk-model-small-pt-0.3"),
@@ -81,24 +90,53 @@ def in_vocab(word: str, lang="pt", timeout=90) -> bool | None:
 
 class VoskWake:
     def __init__(self, words, sr=16000, lang="pt"):
-        from vosk import Model, KaldiRecognizer
+        from vosk import KaldiRecognizer
         self.words = [w.strip().lower() for w in words if w.strip()]
         self.sr = sr
         self.lang = lang
-        model = Model(ensure_model(lang))
-        # Vosk só aceita palavras do vocabulário: "sexta-feira" -> "sexta feira"
-        grammar = [w.replace("-", " ") for w in self.words] + ["[unk]"]
-        self.rec = KaldiRecognizer(model, sr, json.dumps(grammar))
-        self.rec.SetWords(False)
+        self._grammar = json.dumps(
+            [w.replace("-", " ") for w in self.words] + ["[unk]"])
+        self.rec = KaldiRecognizer(_cached_model(lang), sr, self._grammar)
+        self.rec.SetWords(True)  # confiança por palavra (anti-alucinação)
+        self.last_result: dict = {}
+
+    def reset(self):
+        """Recria o reconhecedor (estado limpo pós-disparo). Modelo segue em RAM."""
+        from vosk import KaldiRecognizer
+        self.rec = KaldiRecognizer(_cached_model(self.lang), self.sr,
+                                   self._grammar)
+        self.rec.SetWords(True)
+        self.last_result = {}
 
     def feed(self, pcm16: bytes) -> str:
         """Alimenta áudio novo; retorna texto quando uma elocução completa, senão ''."""
         try:
             if self.rec.AcceptWaveform(pcm16):
-                return json.loads(self.rec.Result()).get("text", "")
+                res = json.loads(self.rec.Result())
+                self.last_result = res if isinstance(res, dict) else {}
+                return self.last_result.get("text", "")
         except Exception:
             pass
         return ""
+
+    def wake_conf(self, text: str, wakes) -> float:
+        """Menor confiança das palavras do gatilho no último resultado (0..1)."""
+        try:
+            from . import stt as sttmod
+            norm = sttmod._norm
+            words = [w.get("word", "") for w in self.last_result.get("result", [])]
+            if not words:
+                return 0.0
+            joined = " ".join(norm(w) for w in words).replace(" ", "")
+            for w in wakes:
+                target = norm(w).replace(" ", "")
+                if target and joined == target:
+                    confs = [float(wd.get("conf", 0)) for wd in
+                             self.last_result.get("result", [])]
+                    return min(confs) if confs else 0.0
+            return 0.0
+        except Exception:
+            return 0.0
 
     def partial(self) -> str:
         try:
@@ -112,6 +150,7 @@ class DualWake:
 
     def __init__(self, words_pt, words_en, sr=16000):
         self.recognizers: list[VoskWake] = []
+        self._last: VoskWake | None = None
         if [w for w in words_pt if w.strip()]:
             self.recognizers.append(VoskWake(words_pt, sr, "pt"))
         if [w for w in words_en if w.strip()]:
@@ -131,10 +170,27 @@ class DualWake:
             try:
                 t = r.feed(pcm16)
                 if t:
+                    self._last = r
                     return t
             except Exception:
                 pass
         return ""
+
+    def wake_conf(self, text: str, wakes) -> float:
+        if self._last is not None:
+            try:
+                return self._last.wake_conf(text, wakes)
+            except Exception:
+                pass
+        return 0.0
+
+    def reset(self):
+        for r in self.recognizers:
+            try:
+                r.reset()
+            except Exception:
+                pass
+        self._last = None
 
     def partial(self) -> str:
         for r in self.recognizers:
