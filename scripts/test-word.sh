@@ -23,6 +23,6 @@ raw = daemon._record(6.0, 16000, dev)
 rms = float(np.sqrt(np.mean(raw.astype(np.float64)**2)))
 print('[test-word] nível captado (RMS): %.4f  %s' % (rms, '(bom p/ fala)' if rms > 0.01 else '(MUITO BAIXO — cheque mic/volume)'))
 txt = stt.transcribe(raw, cfg.get('stt_model', 'small'), language=cfg.get('language'))
-print('[test-word] tiny ouviu: %r' % txt)
+print('[test-word] %s ouviu: %r' % (cfg.get('stt_model', 'small'), txt))
 print('[test-word] ativa \"$WORD\"? %s' % ('SIM' if stt.looks_like_wake(txt, ['$WORD'.lower()]) else 'NAO'))
 " 2>&1 | grep -v "Warning: You are sending"

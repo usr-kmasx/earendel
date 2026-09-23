@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import select
 import shutil
@@ -190,7 +191,8 @@ class WavePopup:
     # ---- API pública ----
     def show(self):
         try:
-            import tkinter  # noqa: F401
+            import tkinter
+            assert tkinter.TkVersion >= 8.0  # checagem de presença
             self._impl = "tk"
         except Exception:
             self._impl = "notify"
