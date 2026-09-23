@@ -34,9 +34,10 @@ mkdir -p models
 echo "[install] integrando modelos..."
 export EARENDEL_ALLOW_DOWNLOAD=1
 ./.venv/bin/python -c "
-from earendel import stt, wake_vosk
+from earendel import stt, wake_vosk, vad_silero
 stt.get_model('small')
 wake_vosk.ensure_model('pt'); wake_vosk.ensure_model('en')
+vad_silero.ensure_model()
 print('[install] modelos integrados.')
 " 2>&1 | tee -a "$LOG"
 
